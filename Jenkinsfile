@@ -2,90 +2,111 @@ pipeline {
     agent any
 
     parameters {
-        choice(name: 'ACTION', choices: ['plan', 'apply', 'destroy'], description: 'Terraform action')
-        choice(name: 'ENV', choices: ['dev', 'prod'], description: 'Target environment')
-        string(name: 'REGION', defaultValue: 'us-east-1', description: 'AWS Region')
+        choice(
+            name: 'ACTION',
+            choices: ['plan', 'apply', 'destroy'],
+            description: 'Terraform action'
+        )
+        choice(
+            name: 'ENV',
+            choices: ['dev', 'prod'],
+            description: 'Target environment'
+        )
+        string(
+            name: 'REGION',
+            defaultValue: 'us-east-1',
+            description: 'AWS Region'
+        )
     }
 
     environment {
-        TF_ENV = "${params.ENV}"
-        ACTION = "${params.ACTION}"
-    AWS_ACCESS_KEY_ID     = credentials('aws-creds')   // <-- use your credential ID here
-    AWS_SECRET_ACCESS_KEY = credentials('aws-creds')   // <-- same ID, Jenkins handles secret
+        AWS_DEFAULT_REGION = "${params.REGION}"
     }
 
     stages {
 
-        stage('Checkout') {
+        stage('Checkout Source') {
             steps {
                 checkout scm
             }
         }
 
-        stage('Terraform Format Check') {
+        stage('Terraform Init') {
             steps {
-                sh 'terraform fmt -check -recursive'
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("env/${params.ENV}") {
+                        sh 'terraform init -input=false'
+                    }
+                }
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                dir("env/${TF_ENV}") {
-                    sh 'terraform init -backend=false'
-                    sh 'terraform validate'
-                }
-            }
-        }
-
-        stage('Terraform Init') {
-            steps {
-                dir("env/${TF_ENV}") {
-                    sh 'terraform init'
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("env/${params.ENV}") {
+                        sh 'terraform validate'
+                    }
                 }
             }
         }
 
         stage('Terraform Plan') {
+            when {
+                expression { params.ACTION == 'plan' || params.ACTION == 'apply' }
+            }
             steps {
-                dir("env/${TF_ENV}") {
-                    sh 'terraform plan -out=tfplan'
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("env/${params.ENV}") {
+                        sh 'terraform plan -out=tfplan'
+                    }
                 }
             }
         }
 
-        stage('Manual Approval') {
+        stage('Terraform Apply') {
             when {
-                anyOf {
-                    expression { params.ACTION == 'apply' }
-                    expression { params.ACTION == 'destroy' }
-                }
+                expression { params.ACTION == 'apply' }
             }
             steps {
-                input message: "Approve Terraform ${params.ACTION} for ${params.ENV}?"
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("env/${params.ENV}") {
+                        sh 'terraform apply -auto-approve tfplan'
+                    }
+                }
             }
         }
 
-        stage('Terraform Apply / Destroy') {
+        stage('Terraform Destroy') {
             when {
-                expression { params.ACTION != 'plan' }
+                expression { params.ACTION == 'destroy' }
             }
             steps {
-                dir("env/${TF_ENV}") {
-                    sh '''
-                        if [ "${ACTION}" = "apply" ]; then
-                          terraform apply -auto-approve tfplan
-                        elif [ "${ACTION}" = "destroy" ]; then
-                          terraform destroy -auto-approve
-                        fi
-                    '''
+                withCredentials([
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                ]) {
+                    dir("env/${params.ENV}") {
+                        sh 'terraform destroy -auto-approve'
+                    }
                 }
             }
         }
     }
 
     post {
-        always {
-            archiveArtifacts artifacts: '**/tfplan', allowEmptyArchive: true
+        success {
+            echo "Terraform ${params.ACTION} completed successfully for ${params.ENV} in region ${params.REGION}"
+        }
+        failure {
+            echo "Terraform ${params.ACTION} failed for ${params.ENV} in region ${params.REGION}"
         }
     }
 }
