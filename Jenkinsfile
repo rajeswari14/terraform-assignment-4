@@ -33,9 +33,7 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
-                ]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform init -input=false'
                     }
@@ -45,9 +43,7 @@ pipeline {
 
         stage('Terraform Validate') {
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
-                ]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform validate'
                     }
@@ -60,11 +56,10 @@ pipeline {
                 expression { params.ACTION == 'plan' || params.ACTION == 'apply' }
             }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
-                ]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     dir("env/${params.ENV}") {
-                        sh 'terraform plan -out=tfplan'
+                        def tfvarsFile = "${params.ENV}.tfvars"
+                        sh "terraform plan -var-file=${tfvarsFile} -out=tfplan"
                     }
                 }
             }
@@ -75,11 +70,10 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
-                ]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     dir("env/${params.ENV}") {
-                        sh 'terraform apply -auto-approve tfplan'
+                        def tfvarsFile = "${params.ENV}.tfvars"
+                        sh "terraform apply -var-file=${tfvarsFile} -auto-approve tfplan"
                     }
                 }
             }
@@ -90,11 +84,10 @@ pipeline {
                 expression { params.ACTION == 'destroy' }
             }
             steps {
-                withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
-                ]) {
+                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
                     dir("env/${params.ENV}") {
-                        sh 'terraform destroy -auto-approve'
+                        def tfvarsFile = "${params.ENV}.tfvars"
+                        sh "terraform destroy -var-file=${tfvarsFile} -auto-approve"
                     }
                 }
             }
