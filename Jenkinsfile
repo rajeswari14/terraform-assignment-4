@@ -34,7 +34,7 @@ pipeline {
         stage('Terraform Init') {
             steps {
                 withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
                 ]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform init -input=false'
@@ -46,7 +46,7 @@ pipeline {
         stage('Terraform Validate') {
             steps {
                 withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
                 ]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform validate'
@@ -61,7 +61,7 @@ pipeline {
             }
             steps {
                 withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
                 ]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform plan -out=tfplan'
@@ -76,7 +76,7 @@ pipeline {
             }
             steps {
                 withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
                 ]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform apply -auto-approve tfplan'
@@ -91,7 +91,7 @@ pipeline {
             }
             steps {
                 withCredentials([
-                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-credentials']
+                    [$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']
                 ]) {
                     dir("env/${params.ENV}") {
                         sh 'terraform destroy -auto-approve'
