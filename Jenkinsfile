@@ -9,6 +9,9 @@ pipeline {
 
     environment {
         TF_ENV = "${params.ENV}"
+        ACTION = "${params.ACTION}"
+    AWS_ACCESS_KEY_ID     = credentials('aws-creds')   // <-- use your credential ID here
+    AWS_SECRET_ACCESS_KEY = credentials('aws-creds')   // <-- same ID, Jenkins handles secret
     }
 
     stages {
