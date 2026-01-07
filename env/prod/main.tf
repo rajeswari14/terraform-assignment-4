@@ -2,6 +2,14 @@ provider "aws" {
   region = "us-east-1"
 }
 
+locals {
+  tags = merge(var.common_tags, {
+    Environment = "prod"
+    Project     = "terraform-assignment"
+  })
+}
+
+
 module "vpc" {
   source              = "../../modules/vpc"
   vpc_cidr            = "10.1.0.0/16"
@@ -20,4 +28,23 @@ module "ec2" {
   vpc_id        = module.vpc.vpc_id
   key_name      = var.key_name
   user_data     = file("${path.module}/user_data.sh")
+}
+
+module "ebs" {
+  source            = "../../modules/ebs"
+  availability_zone = module.ec2.availability_zone
+  instance_id       = module.ec2.instance_id
+
+  volume_size = var.data_volume_size
+  volume_type = "gp3"
+  device_name = "/dev/sdf"
+
+  tags = local.tags
+}
+
+module "app_bucket" {
+  source        = "../../modules/s3"
+  bucket_name   = var.app_bucket_name
+  force_destroy = true
+  tags          = local.tags
 }
