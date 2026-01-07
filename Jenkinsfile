@@ -21,46 +21,64 @@ pipeline {
 
     environment {
         AWS_DEFAULT_REGION = "${params.REGION}"
+        TF_ENV_DIR = "env/${params.ENV}"
+        TF_VARS    = "${params.ENV}.tfvars"
     }
 
     stages {
 
-        stage('Checkout Source') {
+        stage('Checkout') {
             steps {
                 checkout scm
             }
         }
 
+        stage('Terraform Format Check') {
+            steps {
+                sh 'terraform fmt -check -recursive'
+            }
+        }
+
         stage('Terraform Init') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir("env/${params.ENV}") {
-                        sh 'terraform init -input=false'
-                    }
+                dir("${TF_ENV_DIR}") {
+                    sh 'terraform init -input=false'
                 }
             }
         }
 
         stage('Terraform Validate') {
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir("env/${params.ENV}") {
-                        sh 'terraform validate'
-                    }
+                dir("${TF_ENV_DIR}") {
+                    sh 'terraform validate'
                 }
             }
         }
 
         stage('Terraform Plan') {
             when {
-                expression { params.ACTION == 'plan' || params.ACTION == 'apply' }
+                expression { params.ACTION != 'destroy' }
             }
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir("env/${params.ENV}") {
-                        sh "terraform plan -var-file=${params.ENV}.tfvars -out=tfplan"
-                    }
+                dir("${TF_ENV_DIR}") {
+                    sh """
+                      terraform plan \
+                        -var-file=${TF_VARS} \
+                        -out=tfplan
+                    """
                 }
+            }
+        }
+
+        stage('Manual Approval') {
+            when {
+                anyOf {
+                    expression { params.ACTION == 'apply' }
+                    expression { params.ACTION == 'destroy' }
+                }
+            }
+            steps {
+                input message: "Approve Terraform ${params.ACTION} for ${params.ENV}?"
             }
         }
 
@@ -69,10 +87,8 @@ pipeline {
                 expression { params.ACTION == 'apply' }
             }
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir("env/${params.ENV}") {
-                        sh "terraform apply -var-file=${params.ENV}.tfvars -auto-approve tfplan"
-                    }
+                dir("${TF_ENV_DIR}") {
+                    sh 'terraform apply -auto-approve tfplan'
                 }
             }
         }
@@ -82,21 +98,22 @@ pipeline {
                 expression { params.ACTION == 'destroy' }
             }
             steps {
-                withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-creds']]) {
-                    dir("env/${params.ENV}") {
-                        sh "terraform destroy -var-file=${params.ENV}.tfvars -auto-approve"
-                    }
+                dir("${TF_ENV_DIR}") {
+                    sh 'terraform destroy -auto-approve -var-file=${TF_VARS}'
                 }
             }
         }
     }
 
     post {
+        always {
+            archiveArtifacts artifacts: '**/tfplan', allowEmptyArchive: true
+        }
         success {
-            echo "Terraform ${params.ACTION} completed successfully for ${params.ENV} in region ${params.REGION}"
+            echo "Terraform ${params.ACTION} completed successfully for ${params.ENV}"
         }
         failure {
-            echo "Terraform ${params.ACTION} failed for ${params.ENV} in region ${params.REGION}"
+            echo "Terraform ${params.ACTION} failed for ${params.ENV}"
         }
     }
 }
