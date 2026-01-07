@@ -1,4 +1,12 @@
-.terraform/
+# Terraform
+**/.terraform/
 *.tfstate
 *.tfstate.*
 .terraform.lock.hcl
+crash.log
+crash.*.log
+
+# Local backups
+env.bak.*
+modules.bak.*
+*.bak
